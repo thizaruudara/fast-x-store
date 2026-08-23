@@ -444,8 +444,17 @@ export async function getSettingsAsync(): Promise<StoreSettings> {
       .single();
 
     if (!error && dbSettings) {
+      let extraConfig: any = {};
+      if (dbSettings.usdt_trc20_address && dbSettings.usdt_trc20_address.startsWith('{')) {
+        try {
+          extraConfig = JSON.parse(dbSettings.usdt_trc20_address);
+        } catch (e) {}
+      }
+
       return {
         ...INITIAL_SETTINGS,
+        storeName: extraConfig.storeName || INITIAL_SETTINGS.storeName,
+        storeTagline: extraConfig.storeTagline || INITIAL_SETTINGS.storeTagline,
         announcementText: dbSettings.announcement_bar || INITIAL_SETTINGS.announcementText,
         announcementActive: dbSettings.is_promo_banner_active ?? true,
         showPromoBanner: dbSettings.is_promo_banner_active ?? true,
@@ -453,9 +462,17 @@ export async function getSettingsAsync(): Promise<StoreSettings> {
         promoBannerText: dbSettings.promo_banner_text || INITIAL_SETTINGS.promoBannerText,
         binancePayId: dbSettings.binance_pay_id || INITIAL_SETTINGS.binancePayId,
         bep20WalletAddress: dbSettings.usdt_bep20_address || INITIAL_SETTINGS.bep20WalletAddress,
-        trc20WalletAddress: dbSettings.usdt_trc20_address || INITIAL_SETTINGS.trc20WalletAddress,
+        trc20WalletAddress: extraConfig.trc20 || (dbSettings.usdt_trc20_address?.startsWith('{') ? '' : dbSettings.usdt_trc20_address) || INITIAL_SETTINGS.trc20WalletAddress,
         telegramSupportHandle: dbSettings.telegram_support_handle || INITIAL_SETTINGS.telegramSupportHandle,
         adminPasscode: dbSettings.admin_passcode || process.env.ADMIN_PASSCODE || INITIAL_SETTINGS.adminPasscode,
+        resendApiKey: extraConfig.resendApiKey || process.env.RESEND_API_KEY || INITIAL_SETTINGS.resendApiKey,
+        senderEmail: extraConfig.senderEmail || INITIAL_SETTINGS.senderEmail,
+        senderName: extraConfig.senderName || INITIAL_SETTINGS.senderName,
+        emailProvider: extraConfig.emailProvider || INITIAL_SETTINGS.emailProvider,
+        sendOrderConfirmationEmail: extraConfig.sendOrderConfirmationEmail ?? INITIAL_SETTINGS.sendOrderConfirmationEmail,
+        binanceApiKey: extraConfig.binanceApiKey || INITIAL_SETTINGS.binanceApiKey,
+        binanceApiSecret: extraConfig.binanceApiSecret || INITIAL_SETTINGS.binanceApiSecret,
+        enableLiveBinanceApi: extraConfig.enableLiveBinanceApi ?? INITIAL_SETTINGS.enableLiveBinanceApi,
       };
     }
   } catch (err) {
@@ -475,11 +492,25 @@ export async function updateSettingsAsync(newSettings: Partial<StoreSettings>): 
   writeJsonFile('settings.json', updated);
 
   try {
+    const extraPayload = JSON.stringify({
+      resendApiKey: updated.resendApiKey || '',
+      senderEmail: updated.senderEmail || 'orders@fast-x.store',
+      senderName: updated.senderName || 'Fast X Solutions',
+      emailProvider: updated.emailProvider || 'resend',
+      sendOrderConfirmationEmail: updated.sendOrderConfirmationEmail ?? true,
+      storeName: updated.storeName || 'Fast X',
+      storeTagline: updated.storeTagline || 'AI & Subscriptions Vault',
+      binanceApiKey: updated.binanceApiKey || '',
+      binanceApiSecret: updated.binanceApiSecret || '',
+      enableLiveBinanceApi: updated.enableLiveBinanceApi ?? false,
+      trc20: updated.trc20WalletAddress || ''
+    });
+
     const anySettings = updated as any;
     await supabase.from('store_settings').upsert({
       id: 'default',
       usdt_bep20_address: updated.bep20WalletAddress || anySettings.usdtBep20Address || null,
-      usdt_trc20_address: updated.trc20WalletAddress || anySettings.usdtTrc20Address || null,
+      usdt_trc20_address: extraPayload,
       binance_pay_id: updated.binancePayId || anySettings.binancePayId || null,
       telegram_support_handle: updated.telegramSupportHandle || anySettings.telegramSupportHandle || null,
       announcement_bar: updated.announcementText || null,

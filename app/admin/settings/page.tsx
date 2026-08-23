@@ -13,7 +13,9 @@ import {
   Mail,
   Send,
   Sparkles,
-  AlertCircle
+  AlertCircle,
+  Zap,
+  CheckCircle2
 } from 'lucide-react';
 import { StoreSettings } from '@/lib/types';
 import { INITIAL_SETTINGS } from '@/lib/initialData';
@@ -28,6 +30,10 @@ export default function AdminSettingsPage() {
   const [testEmailRecipient, setTestEmailRecipient] = useState('');
   const [sendingTestEmail, setSendingTestEmail] = useState(false);
   const [testEmailStatus, setTestEmailStatus] = useState<{ success: boolean; msg: string } | null>(null);
+
+  // Test Binance State
+  const [testingBinance, setTestingBinance] = useState(false);
+  const [testBinanceStatus, setTestBinanceStatus] = useState<{ success: boolean; msg: string } | null>(null);
 
   const fetchSettings = async () => {
     setLoading(true);
@@ -100,6 +106,38 @@ export default function AdminSettingsPage() {
       setTestEmailStatus({ success: false, msg: err.message || 'Error communicating with server' });
     } finally {
       setSendingTestEmail(false);
+    }
+  };
+
+  const handleTestBinance = async () => {
+    if (!settings.binanceApiKey?.trim() || !settings.binanceApiSecret?.trim()) {
+      setTestBinanceStatus({ success: false, msg: 'Please enter both Binance API Key and Secret before testing' });
+      return;
+    }
+
+    setTestingBinance(true);
+    setTestBinanceStatus(null);
+
+    try {
+      const res = await fetch('/api/admin/test-binance', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          apiKey: settings.binanceApiKey.trim(),
+          apiSecret: settings.binanceApiSecret.trim(),
+        }),
+      });
+
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setTestBinanceStatus({ success: true, msg: data.message });
+      } else {
+        setTestBinanceStatus({ success: false, msg: data.message || 'Binance test connection failed' });
+      }
+    } catch (err: any) {
+      setTestBinanceStatus({ success: false, msg: err.message || 'Network error' });
+    } finally {
+      setTestingBinance(false);
     }
   };
 
@@ -289,6 +327,30 @@ export default function AdminSettingsPage() {
                 <label htmlFor="enableLiveBinanceApi" className="text-xs text-zinc-300 cursor-pointer">
                   <strong>Enable Live Binance API Polling</strong> (Queries your real Binance deposit history)
                 </label>
+              </div>
+
+              {/* Binance Test Connection Button */}
+              <div className="pt-2">
+                <button
+                  type="button"
+                  onClick={handleTestBinance}
+                  disabled={testingBinance}
+                  className="px-4 py-2 rounded-xl bg-amber-400/10 border border-amber-400/30 text-amber-300 hover:bg-amber-400/20 text-xs font-bold transition-all flex items-center gap-2"
+                >
+                  <Zap className="w-3.5 h-3.5 text-amber-400" />
+                  <span>{testingBinance ? 'Connecting to Binance API...' : '⚡ Test Binance API Connection'}</span>
+                </button>
+
+                {testBinanceStatus && (
+                  <div className={`mt-3 p-3 rounded-xl border text-xs font-semibold flex items-center gap-2 ${
+                    testBinanceStatus.success 
+                      ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300' 
+                      : 'bg-red-500/10 border-red-500/30 text-red-300'
+                  }`}>
+                    {testBinanceStatus.success ? <CheckCircle2 className="w-4 h-4 flex-shrink-0" /> : <AlertCircle className="w-4 h-4 flex-shrink-0" />}
+                    <span>{testBinanceStatus.msg}</span>
+                  </div>
+                )}
               </div>
             </div>
           </div>
