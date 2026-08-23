@@ -40,14 +40,14 @@ function writeJsonFile<T>(filename: string, data: T): void {
 }
 
 // ----------------------------------------------------
-// Products (Supabase Persistent + Dynamic Stock)
+// Products (Supabase Persistent)
 // ----------------------------------------------------
 export async function getProductsAsync(): Promise<Product[]> {
   try {
     const { data: dbProducts, error: prodErr } = await supabase
       .from('products')
       .select('*')
-      .order('sort_order', { ascending: true, nullsFirst: false });
+      .order('created_at', { ascending: true });
 
     const { data: dbKeys } = await supabase
       .from('digital_keys')
@@ -55,7 +55,7 @@ export async function getProductsAsync(): Promise<Product[]> {
       .eq('is_used', false);
 
     if (!prodErr && dbProducts && dbProducts.length > 0) {
-      const mapped: Product[] = dbProducts.map((p: any) => {
+      const mapped: Product[] = dbProducts.map((p: any, idx: number) => {
         const availableCount = (dbKeys || []).filter((k: any) => k.product_id === p.id).length;
         return {
           id: p.id,
@@ -64,7 +64,7 @@ export async function getProductsAsync(): Promise<Product[]> {
           category: p.category,
           tagline: p.tagline || '',
           description: p.description || '',
-          icon: p.icon || 'Sparkles',
+          icon: 'Sparkles',
           logoUrl: p.logo_url || '/logos/gemini.svg',
           badge: p.badge || undefined,
           features: p.features || [],
@@ -73,18 +73,18 @@ export async function getProductsAsync(): Promise<Product[]> {
           isActive: p.is_active ?? true,
           warrantyType: p.warranty_type || 'full_period',
           warrantyCustomText: p.warranty_custom_text || undefined,
-          instructions: p.instructions || '',
-          deliveryType: p.delivery_type || 'account_credentials',
-          color: p.color || 'from-amber-400 via-yellow-500 to-amber-600',
+          instructions: '',
+          deliveryType: 'account_credentials',
+          color: 'from-amber-400 via-yellow-500 to-amber-600',
           rating: 4.9,
           reviewCount: 350,
-          sortOrder: p.sort_order || 99
+          sortOrder: idx + 1
         };
       });
       return mapped;
     }
   } catch (err) {
-    console.error('getProductsAsync Supabase error:', err);
+    console.error('getProductsAsync error:', err);
   }
 
   return getProducts();
@@ -139,7 +139,6 @@ export async function saveProductAsync(product: Product): Promise<Product> {
       is_active: product.isActive ?? true,
       warranty_type: product.warrantyType || 'full_period',
       warranty_custom_text: product.warrantyCustomText || null,
-      sort_order: product.sortOrder || 99,
     }, { onConflict: 'id' });
   } catch (err) {
     console.error('saveProductAsync Supabase error:', err);
@@ -159,19 +158,6 @@ export async function reorderProductsAsync(reorderedProducts: Product[]): Promis
     sortOrder: idx + 1
   }));
   writeJsonFile('products.json', updated);
-
-  try {
-    for (let i = 0; i < updated.length; i++) {
-      const prod = updated[i];
-      await supabase
-        .from('products')
-        .update({ sort_order: prod.sortOrder })
-        .eq('id', prod.id);
-    }
-  } catch (err) {
-    console.error('reorderProductsAsync Supabase error:', err);
-  }
-
   return updated;
 }
 
@@ -238,7 +224,7 @@ export async function getOrdersAsync(): Promise<Order[]> {
       }));
     }
   } catch (err) {
-    console.error('getOrdersAsync Supabase error:', err);
+    console.error('getOrdersAsync error:', err);
   }
 
   return readJsonFile<Order[]>('orders.json', []);
@@ -292,7 +278,7 @@ export async function saveOrderAsync(order: Order): Promise<Order> {
       delivered_at: order.deliveredAt || null,
     }, { onConflict: 'id' });
   } catch (err) {
-    console.error('saveOrderAsync Supabase error:', err);
+    console.error('saveOrderAsync error:', err);
   }
 
   return order;
@@ -460,8 +446,6 @@ export async function getSettingsAsync(): Promise<StoreSettings> {
     if (!error && dbSettings) {
       return {
         ...INITIAL_SETTINGS,
-        storeName: dbSettings.store_name || INITIAL_SETTINGS.storeName,
-        storeTagline: dbSettings.store_tagline || INITIAL_SETTINGS.storeTagline,
         announcementText: dbSettings.announcement_bar || INITIAL_SETTINGS.announcementText,
         announcementActive: dbSettings.is_promo_banner_active ?? true,
         showPromoBanner: dbSettings.is_promo_banner_active ?? true,
@@ -471,7 +455,6 @@ export async function getSettingsAsync(): Promise<StoreSettings> {
         bep20WalletAddress: dbSettings.usdt_bep20_address || INITIAL_SETTINGS.bep20WalletAddress,
         trc20WalletAddress: dbSettings.usdt_trc20_address || INITIAL_SETTINGS.trc20WalletAddress,
         telegramSupportHandle: dbSettings.telegram_support_handle || INITIAL_SETTINGS.telegramSupportHandle,
-        whatsappSupportNumber: dbSettings.whatsapp_number || INITIAL_SETTINGS.whatsappSupportNumber,
         adminPasscode: dbSettings.admin_passcode || process.env.ADMIN_PASSCODE || INITIAL_SETTINGS.adminPasscode,
       };
     }
@@ -499,14 +482,12 @@ export async function updateSettingsAsync(newSettings: Partial<StoreSettings>): 
       usdt_trc20_address: updated.trc20WalletAddress || anySettings.usdtTrc20Address || null,
       binance_pay_id: updated.binancePayId || anySettings.binancePayId || null,
       telegram_support_handle: updated.telegramSupportHandle || anySettings.telegramSupportHandle || null,
-      whatsapp_number: updated.whatsappSupportNumber || anySettings.whatsappNumber || null,
       announcement_bar: updated.announcementText || null,
       promo_banner_code: updated.promoBannerCode || null,
       promo_banner_text: updated.promoBannerText || null,
       is_promo_banner_active: updated.showPromoBanner ?? true,
       admin_passcode: updated.adminPasscode || anySettings.adminPasscode || null,
-      store_name: updated.storeName || null,
-      store_tagline: updated.storeTagline || null,
+      auto_dispatch_keys: anySettings.autoDispatchKeys ?? true,
     }, { onConflict: 'id' });
   } catch (err) {
     console.error('updateSettingsAsync Supabase error:', err);
@@ -540,9 +521,7 @@ export async function getDigitalKeysAsync(productId?: string): Promise<DigitalKe
         email: k.email,
         password: k.password,
         twoFactorSecret: k.two_factor_secret,
-        couponCode: k.coupon_code,
-        inviteUrl: k.invite_url,
-        deliveryType: k.delivery_type || (k.email ? 'account_credentials' : k.invite_url ? 'invite_link' : 'coupon_key'),
+        deliveryType: 'account_credentials' as const,
         isUsed: k.is_used,
         assignedToOrderId: k.claimed_by_order_id,
         usedAt: k.claimed_at,
@@ -701,7 +680,7 @@ export async function claimKeyForOrderAsync(productId: string, planId: string, o
         email: availableKey.email,
         password: availableKey.password,
         twoFactorSecret: availableKey.two_factor_secret,
-        deliveryType: availableKey.delivery_type || 'account_credentials',
+        deliveryType: 'account_credentials',
         isUsed: true,
         assignedToOrderId: orderId,
         usedAt,
