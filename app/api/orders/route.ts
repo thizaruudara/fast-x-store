@@ -1,7 +1,9 @@
 import { NextResponse } from 'next/server';
-import { getOrders, saveOrder, getSettings, getCouponByCode, saveCoupon } from '@/lib/db';
+import { getOrdersAsync, saveOrderAsync, getSettingsAsync, getCouponByCodeAsync, saveCouponAsync } from '@/lib/db';
 import { generateOrderId, calculateOrderTotal } from '@/lib/utils';
 import { Order } from '@/lib/types';
+
+export const dynamic = 'force-dynamic';
 
 export async function GET(req: Request) {
   try {
@@ -9,7 +11,7 @@ export async function GET(req: Request) {
     const status = searchParams.get('status');
     const email = searchParams.get('email');
 
-    let orders = getOrders();
+    let orders = await getOrdersAsync();
     if (status) {
       orders = orders.filter(o => o.status === status);
     }
@@ -32,12 +34,12 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Email and at least one item are required' }, { status: 400 });
     }
 
-    const settings = getSettings();
+    const settings = await getSettingsAsync();
     const subtotal = items.reduce((sum: number, item: any) => sum + (item.price * item.quantity), 0);
 
     let discountAmount = 0;
     if (couponCode) {
-      const coupon = getCouponByCode(couponCode);
+      const coupon = await getCouponByCodeAsync(couponCode);
       if (coupon && coupon.isActive) {
         if (coupon.discountType === 'percentage') {
           discountAmount = (subtotal * coupon.discountValue) / 100;
@@ -46,35 +48,34 @@ export async function POST(req: Request) {
         }
         // Increment coupon usage
         coupon.usedCount += 1;
-        saveCoupon(coupon);
+        await saveCouponAsync(coupon);
       }
     }
 
     // Fetch active pending order totals to guarantee 100% collision-free micro-fee verification
-    const allOrders = getOrders();
+    const allOrders = await getOrdersAsync();
     const activePendingTotals = allOrders
       .filter((o) => o.status === 'pending' && new Date(o.expiresAt).getTime() > Date.now())
       .map((o) => o.totalAmount);
 
     // Generate guaranteed unique micro-fee (e.g. +0.0124, +0.0287, +0.0541 USDT)
     const { discountedSubtotal, microFee, totalUsdt } = calculateOrderTotal(
-      subtotal, 
-      discountAmount, 
+      subtotal,
+      discountAmount,
       activePendingTotals
     );
 
-    const orderId = generateOrderId();
     const now = new Date();
-    const expiresAt = new Date(now.getTime() + 20 * 60 * 1000).toISOString(); // 20 min expiration
+    const expiresAt = new Date(now.getTime() + 20 * 60 * 1000); // 20 mins expiry
 
     const newOrder: Order = {
-      id: orderId,
+      id: generateOrderId(),
       customerEmail: customerEmail.trim(),
       telegramUsername: telegramUsername ? telegramUsername.trim() : undefined,
       items,
       couponCode: couponCode || undefined,
-      discountAmount: Number(discountAmount.toFixed(2)),
-      subtotal: Number(subtotal.toFixed(2)),
+      discountAmount,
+      subtotal,
       verificationFee: microFee,
       totalAmount: totalUsdt,
       paymentMethod: 'binance_pay',
@@ -82,17 +83,17 @@ export async function POST(req: Request) {
         exactUsdtAmount: totalUsdt,
         bep20Address: settings.bep20WalletAddress,
         binancePayId: settings.binancePayId,
-        network: 'BEP-20 (BNB Smart Chain) / Binance Pay'
+        network: 'BEP-20 (BNB Smart Chain)',
       },
       status: 'pending',
       createdAt: now.toISOString(),
-      expiresAt: expiresAt,
+      expiresAt: expiresAt.toISOString(),
     };
 
-    const saved = saveOrder(newOrder);
-    return NextResponse.json(saved, { status: 201 });
+    const saved = await saveOrderAsync(newOrder);
+    return NextResponse.json(saved);
   } catch (error) {
-    console.error('Error creating order:', error);
+    console.error('Failed to create order:', error);
     return NextResponse.json({ error: 'Failed to create order' }, { status: 500 });
   }
 }

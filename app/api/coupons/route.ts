@@ -1,10 +1,12 @@
 import { NextResponse } from 'next/server';
-import { getCoupons, saveCoupon, deleteCoupon } from '@/lib/db';
+import { getCouponsAsync, saveCouponAsync, deleteCouponAsync } from '@/lib/db';
 import { Coupon } from '@/lib/types';
+
+export const dynamic = 'force-dynamic';
 
 export async function GET() {
   try {
-    const coupons = getCoupons();
+    const coupons = await getCouponsAsync();
     return NextResponse.json(coupons);
   } catch (error) {
     return NextResponse.json({ error: 'Failed to fetch coupons' }, { status: 500 });
@@ -25,7 +27,7 @@ export async function POST(req: Request) {
     if (body.usedCount === undefined) body.usedCount = 0;
     if (body.isActive === undefined) body.isActive = true;
 
-    const saved = saveCoupon(body);
+    const saved = await saveCouponAsync(body);
     return NextResponse.json(saved);
   } catch (error) {
     return NextResponse.json({ error: 'Failed to save coupon' }, { status: 500 });
@@ -38,7 +40,7 @@ export async function DELETE(req: Request) {
     const id = searchParams.get('id');
     if (!id) return NextResponse.json({ error: 'ID is required' }, { status: 400 });
 
-    deleteCoupon(id);
+    await deleteCouponAsync(id);
     return NextResponse.json({ success: true });
   } catch (error) {
     return NextResponse.json({ error: 'Failed to delete coupon' }, { status: 500 });

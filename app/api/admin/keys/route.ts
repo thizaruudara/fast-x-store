@@ -1,37 +1,14 @@
 import { NextResponse } from 'next/server';
-import { getDigitalKeys, addDigitalKeys, deleteDigitalKey } from '@/lib/db';
-import { supabase } from '@/lib/supabase';
+import { getDigitalKeysAsync, addDigitalKeysAsync, deleteDigitalKeyAsync, NewKeyInput } from '@/lib/db';
+
+export const dynamic = 'force-dynamic';
 
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
     const productId = searchParams.get('productId') || undefined;
 
-    // Fetch from Supabase
-    let query = supabase.from('digital_keys').select('*').order('created_at', { ascending: false });
-    if (productId) {
-      query = query.eq('product_id', productId);
-    }
-    const { data: dbKeys, error } = await query;
-
-    if (!error && dbKeys && dbKeys.length > 0) {
-      const mapped = dbKeys.map((k: any) => ({
-        id: k.id,
-        productId: k.product_id,
-        planId: k.plan_id,
-        content: k.content,
-        email: k.email,
-        password: k.password,
-        twoFactorSecret: k.two_factor_secret,
-        isUsed: k.is_used,
-        assignedToOrderId: k.claimed_by_order_id,
-        usedAt: k.claimed_at,
-        createdAt: k.created_at
-      }));
-      return NextResponse.json(mapped);
-    }
-
-    const keys = getDigitalKeys(productId);
+    const keys = await getDigitalKeysAsync(productId);
     return NextResponse.json(keys);
   } catch (error) {
     return NextResponse.json({ error: 'Failed to fetch keys' }, { status: 500 });
@@ -47,11 +24,11 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Product ID is required' }, { status: 400 });
     }
 
-    let keyObjects: { productId: string; planId?: string; content: string }[] = [];
+    let keyInputs: NewKeyInput[] = [];
 
     // Structured 3-box accounts submission
     if (Array.isArray(accounts) && accounts.length > 0) {
-      keyObjects = accounts
+      keyInputs = accounts
         .filter((acc: any) => acc.email?.trim() && acc.password?.trim())
         .map((acc: any) => {
           const email = acc.email.trim();
@@ -63,22 +40,26 @@ export async function POST(req: Request) {
             productId,
             planId: planId || acc.planId || '',
             content,
+            email,
+            password: pass,
+            twoFactorSecret: twoFactor || undefined,
+            deliveryType: 'account_credentials' as const,
           };
         });
     } else if (rawKeys && typeof rawKeys === 'string') {
       const lines = rawKeys.split('\n').map((l: string) => l.trim()).filter((l: string) => l.length > 0);
-      keyObjects = lines.map((content: string) => ({
+      keyInputs = lines.map((content: string) => ({
         productId,
         planId: planId || '',
         content,
       }));
     }
 
-    if (keyObjects.length === 0) {
+    if (keyInputs.length === 0) {
       return NextResponse.json({ error: 'Please provide at least one account with Email and Password' }, { status: 400 });
     }
 
-    const added = addDigitalKeys(keyObjects);
+    const added = await addDigitalKeysAsync(keyInputs);
     return NextResponse.json({ success: true, count: added.length, keys: added });
   } catch (error) {
     console.error('Failed to add keys:', error);
@@ -94,7 +75,7 @@ export async function DELETE(req: Request) {
       return NextResponse.json({ error: 'Key ID is required' }, { status: 400 });
     }
 
-    deleteDigitalKey(id);
+    await deleteDigitalKeyAsync(id);
     return NextResponse.json({ success: true });
   } catch (error) {
     return NextResponse.json({ error: 'Failed to delete key' }, { status: 500 });

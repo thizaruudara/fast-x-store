@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
-import { getSettings } from '@/lib/db';
+import { getSettingsAsync } from '@/lib/db';
+
+export const dynamic = 'force-dynamic';
 
 /**
  * Public Safe Store Settings Endpoint
@@ -7,7 +9,7 @@ import { getSettings } from '@/lib/db';
  */
 export async function GET() {
   try {
-    const raw = getSettings();
+    const raw = await getSettingsAsync();
 
     // Sanitize and expose only safe public storefront data
     const publicSettings = {

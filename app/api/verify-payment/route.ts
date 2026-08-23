@@ -1,7 +1,9 @@
 import { NextResponse } from 'next/server';
-import { getOrderById, updateOrderStatus, claimKeyForOrder, getProductById } from '@/lib/db';
+import { getOrderByIdAsync, updateOrderStatusAsync, claimKeyForOrderAsync, getProductByIdAsync } from '@/lib/db';
 import { verifyBinancePayment } from '@/lib/binance';
 import { sendOrderCredentialsEmail } from '@/lib/email';
+
+export const dynamic = 'force-dynamic';
 
 export async function POST(req: Request) {
   try {
@@ -10,7 +12,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Order ID is required' }, { status: 400 });
     }
 
-    const order = getOrderById(orderId);
+    const order = await getOrderByIdAsync(orderId);
     if (!order) {
       return NextResponse.json({ error: 'Order not found' }, { status: 404 });
     }
@@ -36,7 +38,7 @@ export async function POST(req: Request) {
 
       // Loop through EVERY item and EVERY quantity unit
       for (const item of order.items) {
-        const product = getProductById(item.productId);
+        const product = await getProductByIdAsync(item.productId);
         const qty = item.quantity || 1;
 
         for (let q = 1; q <= qty; q++) {
@@ -44,7 +46,7 @@ export async function POST(req: Request) {
             ? `[${item.productName} (${item.planName}) #${q}]`
             : `[${item.productName} (${item.planName})]`;
 
-          const claimedKey = claimKeyForOrder(item.productId, item.planId, order.id);
+          const claimedKey = await claimKeyForOrderAsync(item.productId, item.planId, order.id);
           
           if (claimedKey) {
             // Include product title prefix so customer clearly sees what each credential is for
@@ -65,7 +67,7 @@ export async function POST(req: Request) {
         }
       }
 
-      const updatedOrder = updateOrderStatus(order.id, 'delivered', {
+      const updatedOrder = await updateOrderStatusAsync(order.id, 'delivered', {
         txHash: verification.txHash,
         deliveredKeys: deliveredKeys,
         deliveryNotes: deliveryNotes || undefined,

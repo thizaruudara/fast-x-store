@@ -35,18 +35,65 @@ function writeJsonFile<T>(filename: string, data: T): void {
     const filePath = path.join(DATA_DIR, filename);
     fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf-8');
   } catch (error) {
-    // Read-only on serverless, syncs directly to Supabase cloud database
+    // Read-only on serverless
   }
 }
 
 // ----------------------------------------------------
-// Products (with dynamic stock calculation from Digital Key Vault)
+// Products (Supabase Persistent + Dynamic Stock)
 // ----------------------------------------------------
+export async function getProductsAsync(): Promise<Product[]> {
+  try {
+    const { data: dbProducts, error: prodErr } = await supabase
+      .from('products')
+      .select('*')
+      .order('sort_order', { ascending: true, nullsFirst: false });
+
+    const { data: dbKeys } = await supabase
+      .from('digital_keys')
+      .select('product_id, is_used')
+      .eq('is_used', false);
+
+    if (!prodErr && dbProducts && dbProducts.length > 0) {
+      const mapped: Product[] = dbProducts.map((p: any) => {
+        const availableCount = (dbKeys || []).filter((k: any) => k.product_id === p.id).length;
+        return {
+          id: p.id,
+          name: p.name,
+          slug: p.slug,
+          category: p.category,
+          tagline: p.tagline || '',
+          description: p.description || '',
+          icon: p.icon || 'Sparkles',
+          logoUrl: p.logo_url || '/logos/gemini.svg',
+          badge: p.badge || undefined,
+          features: p.features || [],
+          plans: p.plans || [],
+          stockCount: availableCount > 0 ? availableCount : (p.stock_count || 0),
+          isActive: p.is_active ?? true,
+          warrantyType: p.warranty_type || 'full_period',
+          warrantyCustomText: p.warranty_custom_text || undefined,
+          instructions: p.instructions || '',
+          deliveryType: p.delivery_type || 'account_credentials',
+          color: p.color || 'from-amber-400 via-yellow-500 to-amber-600',
+          rating: 4.9,
+          reviewCount: 350,
+          sortOrder: p.sort_order || 99
+        };
+      });
+      return mapped;
+    }
+  } catch (err) {
+    console.error('getProductsAsync Supabase error:', err);
+  }
+
+  return getProducts();
+}
+
 export function getProducts(): Product[] {
   const products = readJsonFile<Product[]>('products.json', INITIAL_PRODUCTS);
   const keys = getDigitalKeys();
 
-  // Dynamically calculate live stock count from available unused keys in vault
   return products.map((prod) => {
     const availableKeys = keys.filter(k => k.productId === prod.id && !k.isUsed);
     return {
@@ -56,24 +103,18 @@ export function getProducts(): Product[] {
   });
 }
 
+export async function getProductByIdAsync(id: string): Promise<Product | undefined> {
+  const products = await getProductsAsync();
+  return products.find(p => p.id === id);
+}
+
 export function getProductById(id: string): Product | undefined {
   const products = getProducts();
   return products.find(p => p.id === id);
 }
 
-export function getProductBySlug(slug: string): Product | undefined {
-  const products = getProducts();
-  return products.find(p => p.slug === slug);
-}
-
-export function saveProduct(product: Product): Product {
+export async function saveProductAsync(product: Product): Promise<Product> {
   const products = readJsonFile<Product[]>('products.json', INITIAL_PRODUCTS);
-  const keys = getDigitalKeys();
-  const availableKeys = keys.filter(k => k.productId === product.id && !k.isUsed);
-  if (availableKeys.length > 0) {
-    product.stockCount = availableKeys.length;
-  }
-
   const index = products.findIndex(p => p.id === product.id);
   if (index >= 0) {
     products[index] = product;
@@ -82,56 +123,134 @@ export function saveProduct(product: Product): Product {
   }
   writeJsonFile('products.json', products);
 
-  // Sync to Supabase in background
-  supabase.from('products').upsert({
-    id: product.id,
-    name: product.name,
-    slug: product.slug,
-    category: product.category,
-    tagline: product.tagline || null,
-    description: product.description || null,
-    logo_url: product.logoUrl || null,
-    badge: product.badge || null,
-    features: product.features || [],
-    plans: product.plans || [],
-    stock_count: product.stockCount || 0,
-    is_active: product.isActive ?? true,
-    warranty_type: product.warrantyType || 'full_period',
-    warranty_custom_text: product.warrantyCustomText || null,
-  }, { onConflict: 'id' }).then(({ error }) => {
-    if (error) console.error('Supabase saveProduct error:', error);
-  });
+  try {
+    await supabase.from('products').upsert({
+      id: product.id,
+      name: product.name,
+      slug: product.slug,
+      category: product.category,
+      tagline: product.tagline || null,
+      description: product.description || null,
+      logo_url: product.logoUrl || null,
+      badge: product.badge || null,
+      features: product.features || [],
+      plans: product.plans || [],
+      stock_count: product.stockCount || 0,
+      is_active: product.isActive ?? true,
+      warranty_type: product.warrantyType || 'full_period',
+      warranty_custom_text: product.warrantyCustomText || null,
+      sort_order: product.sortOrder || 99,
+    }, { onConflict: 'id' });
+  } catch (err) {
+    console.error('saveProductAsync Supabase error:', err);
+  }
 
   return product;
 }
 
-export function reorderProducts(reorderedProducts: Product[]): Product[] {
+export function saveProduct(product: Product): Product {
+  saveProductAsync(product);
+  return product;
+}
+
+export async function reorderProductsAsync(reorderedProducts: Product[]): Promise<Product[]> {
   const updated = reorderedProducts.map((p, idx) => ({
     ...p,
     sortOrder: idx + 1
   }));
   writeJsonFile('products.json', updated);
+
+  try {
+    for (let i = 0; i < updated.length; i++) {
+      const prod = updated[i];
+      await supabase
+        .from('products')
+        .update({ sort_order: prod.sortOrder })
+        .eq('id', prod.id);
+    }
+  } catch (err) {
+    console.error('reorderProductsAsync Supabase error:', err);
+  }
+
   return updated;
 }
 
-export function deleteProduct(id: string): boolean {
+export function reorderProducts(reorderedProducts: Product[]): Product[] {
+  reorderProductsAsync(reorderedProducts);
+  return reorderedProducts.map((p, idx) => ({ ...p, sortOrder: idx + 1 }));
+}
+
+export async function deleteProductAsync(id: string): Promise<boolean> {
   const products = readJsonFile<Product[]>('products.json', INITIAL_PRODUCTS);
   const filtered = products.filter(p => p.id !== id);
   writeJsonFile('products.json', filtered);
 
-  // Sync delete to Supabase
-  supabase.from('products').delete().eq('id', id).then(({ error }) => {
-    if (error) console.error('Supabase deleteProduct error:', error);
-  });
+  try {
+    await supabase.from('products').delete().eq('id', id);
+  } catch (err) {
+    console.error('deleteProductAsync error:', err);
+  }
 
   return true;
 }
 
+export function deleteProduct(id: string): boolean {
+  deleteProductAsync(id);
+  return true;
+}
+
 // ----------------------------------------------------
-// Orders (with Supabase sync)
+// Orders (Supabase Persistent)
 // ----------------------------------------------------
+export async function getOrdersAsync(): Promise<Order[]> {
+  try {
+    const { data: dbOrders, error } = await supabase
+      .from('orders')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (!error && dbOrders && dbOrders.length > 0) {
+      return dbOrders.map((o: any) => ({
+        id: o.id,
+        customerEmail: o.customer_email,
+        telegramUsername: o.customer_telegram || '',
+        items: o.items || [],
+        discountAmount: o.discount || 0,
+        subtotal: o.subtotal || 0,
+        verificationFee: o.micro_fee || 0.0123,
+        totalAmount: o.total_amount,
+        paymentMethod: o.payment_method || 'binance_pay',
+        paymentDetails: {
+          exactUsdtAmount: o.total_amount,
+          bep20Address: o.payment_address || '',
+          binancePayId: '982341098',
+          txHash: o.tx_hash,
+          network: 'BEP-20 (BNB Smart Chain)'
+        },
+        status: o.status,
+        deliveredKeys: o.delivered_keys || [],
+        deliveryNotes: o.delivery_notes,
+        couponCode: o.coupon_code,
+        createdAt: o.created_at,
+        expiresAt: new Date(new Date(o.created_at).getTime() + 20 * 60 * 1000).toISOString(),
+        paidAt: o.paid_at,
+        deliveredAt: o.delivered_at
+      }));
+    }
+  } catch (err) {
+    console.error('getOrdersAsync Supabase error:', err);
+  }
+
+  return readJsonFile<Order[]>('orders.json', []);
+}
+
 export function getOrders(): Order[] {
   return readJsonFile<Order[]>('orders.json', []);
+}
+
+export async function getOrderByIdAsync(id: string): Promise<Order | undefined> {
+  const orders = await getOrdersAsync();
+  return orders.find(o => o.id === id);
 }
 
 export function getOrderById(id: string): Order | undefined {
@@ -139,7 +258,7 @@ export function getOrderById(id: string): Order | undefined {
   return orders.find(o => o.id === id);
 }
 
-export function saveOrder(order: Order): Order {
+export async function saveOrderAsync(order: Order): Promise<Order> {
   const orders = getOrders();
   const index = orders.findIndex(o => o.id === order.id);
   if (index >= 0) {
@@ -149,41 +268,47 @@ export function saveOrder(order: Order): Order {
   }
   writeJsonFile('orders.json', orders);
 
-  // Sync to Supabase in background
-  const anyOrder = order as any;
-  supabase.from('orders').upsert({
-    id: order.id,
-    customer_email: order.customerEmail,
-    customer_telegram: anyOrder.customerTelegram || order.telegramUsername || null,
-    customer_user_id: anyOrder.customerUserId || null,
-    items: order.items,
-    subtotal: order.subtotal,
-    discount: anyOrder.discount || order.discountAmount || 0,
-    micro_fee: anyOrder.microFee || order.verificationFee || 0.0123,
-    total_amount: order.totalAmount,
-    status: order.status,
-    payment_method: order.paymentMethod,
-    payment_address: anyOrder.paymentAddress || order.paymentDetails?.bep20Address || null,
-    tx_hash: order.paymentDetails?.txHash || null,
-    delivered_keys: order.deliveredKeys || [],
-    delivery_notes: order.deliveryNotes || null,
-    coupon_code: order.couponCode || null,
-    created_at: order.createdAt,
-    paid_at: order.paidAt || null,
-    delivered_at: order.deliveredAt || null,
-  }, { onConflict: 'id' }).then(({ error }) => {
-    if (error) console.error('Supabase saveOrder error:', error);
-  });
+  try {
+    const anyOrder = order as any;
+    await supabase.from('orders').upsert({
+      id: order.id,
+      customer_email: order.customerEmail,
+      customer_telegram: anyOrder.customerTelegram || order.telegramUsername || null,
+      customer_user_id: anyOrder.customerUserId || null,
+      items: order.items,
+      subtotal: order.subtotal,
+      discount: anyOrder.discount || order.discountAmount || 0,
+      micro_fee: anyOrder.microFee || order.verificationFee || 0.0123,
+      total_amount: order.totalAmount,
+      status: order.status,
+      payment_method: order.paymentMethod,
+      payment_address: anyOrder.paymentAddress || order.paymentDetails?.bep20Address || null,
+      tx_hash: order.paymentDetails?.txHash || null,
+      delivered_keys: order.deliveredKeys || [],
+      delivery_notes: order.deliveryNotes || null,
+      coupon_code: order.couponCode || null,
+      created_at: order.createdAt,
+      paid_at: order.paidAt || null,
+      delivered_at: order.deliveredAt || null,
+    }, { onConflict: 'id' });
+  } catch (err) {
+    console.error('saveOrderAsync Supabase error:', err);
+  }
 
   return order;
 }
 
-export function updateOrderStatus(
+export function saveOrder(order: Order): Order {
+  saveOrderAsync(order);
+  return order;
+}
+
+export async function updateOrderStatusAsync(
   id: string, 
   status: Order['status'], 
   extra?: { txHash?: string; deliveredKeys?: string[]; deliveryNotes?: string }
-): Order | undefined {
-  const orders = getOrders();
+): Promise<Order | undefined> {
+  const orders = await getOrdersAsync();
   const index = orders.findIndex(o => o.id === id);
   if (index === -1) return undefined;
 
@@ -205,29 +330,63 @@ export function updateOrderStatus(
     order.deliveryNotes = extra.deliveryNotes;
   }
 
-  orders[index] = order;
-  writeJsonFile('orders.json', orders);
-
-  // Sync status update to Supabase
-  supabase.from('orders').update({
-    status: order.status,
-    paid_at: order.paidAt || null,
-    delivered_at: order.deliveredAt || null,
-    tx_hash: order.paymentDetails?.txHash || null,
-    delivered_keys: order.deliveredKeys || [],
-    delivery_notes: order.deliveryNotes || null,
-  }).eq('id', id).then(({ error }) => {
-    if (error) console.error('Supabase updateOrderStatus error:', error);
-  });
+  try {
+    await supabase.from('orders').update({
+      status: order.status,
+      paid_at: order.paidAt || null,
+      delivered_at: order.deliveredAt || null,
+      tx_hash: order.paymentDetails?.txHash || null,
+      delivered_keys: order.deliveredKeys || [],
+      delivery_notes: order.deliveryNotes || null,
+    }).eq('id', id);
+  } catch (err) {
+    console.error('updateOrderStatusAsync error:', err);
+  }
 
   return order;
 }
 
+export function updateOrderStatus(
+  id: string, 
+  status: Order['status'], 
+  extra?: { txHash?: string; deliveredKeys?: string[]; deliveryNotes?: string }
+): Order | undefined {
+  updateOrderStatusAsync(id, status, extra);
+  return getOrderById(id);
+}
+
 // ----------------------------------------------------
-// Coupons (with Supabase sync)
+// Coupons (Supabase Persistent)
 // ----------------------------------------------------
+export async function getCouponsAsync(): Promise<Coupon[]> {
+  try {
+    const { data: dbCoupons, error } = await supabase.from('coupons').select('*');
+    if (!error && dbCoupons && dbCoupons.length > 0) {
+      return dbCoupons.map((c: any) => ({
+        id: c.id,
+        code: c.code,
+        discountType: 'percentage',
+        discountValue: c.discount_percent || 10,
+        minOrderAmount: 0,
+        maxUses: c.max_uses,
+        usedCount: c.usage_count || 0,
+        expiresAt: c.expires_at,
+        isActive: c.is_active ?? true
+      }));
+    }
+  } catch (err) {
+    console.error('getCouponsAsync error:', err);
+  }
+  return readJsonFile<Coupon[]>('coupons.json', INITIAL_COUPONS);
+}
+
 export function getCoupons(): Coupon[] {
   return readJsonFile<Coupon[]>('coupons.json', INITIAL_COUPONS);
+}
+
+export async function getCouponByCodeAsync(code: string): Promise<Coupon | undefined> {
+  const coupons = await getCouponsAsync();
+  return coupons.find(c => c.code.toUpperCase() === code.trim().toUpperCase());
 }
 
 export function getCouponByCode(code: string): Coupon | undefined {
@@ -235,7 +394,7 @@ export function getCouponByCode(code: string): Coupon | undefined {
   return coupons.find(c => c.code.toUpperCase() === code.trim().toUpperCase());
 }
 
-export function saveCoupon(coupon: Coupon): Coupon {
+export async function saveCouponAsync(coupon: Coupon): Promise<Coupon> {
   const coupons = getCoupons();
   const index = coupons.findIndex(c => c.id === coupon.id);
   if (index >= 0) {
@@ -245,71 +404,158 @@ export function saveCoupon(coupon: Coupon): Coupon {
   }
   writeJsonFile('coupons.json', coupons);
 
-  // Sync to Supabase
-  const anyCoupon = coupon as any;
-  supabase.from('coupons').upsert({
-    id: coupon.id,
-    code: coupon.code.toUpperCase(),
-    discount_percent: anyCoupon.discountPercent || coupon.discountValue || 0,
-    is_active: coupon.isActive ?? true,
-    usage_count: anyCoupon.usageCount || coupon.usedCount || 0,
-    max_uses: coupon.maxUses || null,
-    expires_at: coupon.expiresAt || null,
-  }, { onConflict: 'id' }).then(({ error }) => {
-    if (error) console.error('Supabase saveCoupon error:', error);
-  });
+  try {
+    const anyCoupon = coupon as any;
+    await supabase.from('coupons').upsert({
+      id: coupon.id,
+      code: coupon.code.toUpperCase(),
+      discount_percent: anyCoupon.discountPercent || coupon.discountValue || 0,
+      is_active: coupon.isActive ?? true,
+      usage_count: anyCoupon.usageCount || coupon.usedCount || 0,
+      max_uses: coupon.maxUses || null,
+      expires_at: coupon.expiresAt || null,
+    }, { onConflict: 'id' });
+  } catch (err) {
+    console.error('saveCouponAsync error:', err);
+  }
 
   return coupon;
 }
 
-export function deleteCoupon(id: string): boolean {
+export function saveCoupon(coupon: Coupon): Coupon {
+  saveCouponAsync(coupon);
+  return coupon;
+}
+
+export async function deleteCouponAsync(id: string): Promise<boolean> {
   const coupons = getCoupons();
   const filtered = coupons.filter(c => c.id !== id);
   writeJsonFile('coupons.json', filtered);
 
-  supabase.from('coupons').delete().eq('id', id).then(({ error }) => {
-    if (error) console.error('Supabase deleteCoupon error:', error);
-  });
+  try {
+    await supabase.from('coupons').delete().eq('id', id);
+  } catch (err) {
+    console.error('deleteCouponAsync error:', err);
+  }
 
   return true;
 }
 
+export function deleteCoupon(id: string): boolean {
+  deleteCouponAsync(id);
+  return true;
+}
+
 // ----------------------------------------------------
-// Settings (with Supabase sync)
+// Settings (Supabase Persistent)
 // ----------------------------------------------------
+export async function getSettingsAsync(): Promise<StoreSettings> {
+  try {
+    const { data: dbSettings, error } = await supabase
+      .from('store_settings')
+      .select('*')
+      .eq('id', 'default')
+      .single();
+
+    if (!error && dbSettings) {
+      return {
+        ...INITIAL_SETTINGS,
+        storeName: dbSettings.store_name || INITIAL_SETTINGS.storeName,
+        storeTagline: dbSettings.store_tagline || INITIAL_SETTINGS.storeTagline,
+        announcementText: dbSettings.announcement_bar || INITIAL_SETTINGS.announcementText,
+        announcementActive: dbSettings.is_promo_banner_active ?? true,
+        showPromoBanner: dbSettings.is_promo_banner_active ?? true,
+        promoBannerCode: dbSettings.promo_banner_code || INITIAL_SETTINGS.promoBannerCode,
+        promoBannerText: dbSettings.promo_banner_text || INITIAL_SETTINGS.promoBannerText,
+        binancePayId: dbSettings.binance_pay_id || INITIAL_SETTINGS.binancePayId,
+        bep20WalletAddress: dbSettings.usdt_bep20_address || INITIAL_SETTINGS.bep20WalletAddress,
+        trc20WalletAddress: dbSettings.usdt_trc20_address || INITIAL_SETTINGS.trc20WalletAddress,
+        telegramSupportHandle: dbSettings.telegram_support_handle || INITIAL_SETTINGS.telegramSupportHandle,
+        whatsappSupportNumber: dbSettings.whatsapp_number || INITIAL_SETTINGS.whatsappSupportNumber,
+        adminPasscode: dbSettings.admin_passcode || process.env.ADMIN_PASSCODE || INITIAL_SETTINGS.adminPasscode,
+      };
+    }
+  } catch (err) {
+    console.error('getSettingsAsync error:', err);
+  }
+
+  return getSettings();
+}
+
 export function getSettings(): StoreSettings {
   return readJsonFile<StoreSettings>('settings.json', INITIAL_SETTINGS);
 }
 
-export function updateSettings(newSettings: Partial<StoreSettings>): StoreSettings {
-  const current = getSettings();
+export async function updateSettingsAsync(newSettings: Partial<StoreSettings>): Promise<StoreSettings> {
+  const current = await getSettingsAsync();
   const updated = { ...current, ...newSettings };
   writeJsonFile('settings.json', updated);
 
-  // Sync to Supabase
-  const anySettings = updated as any;
-  supabase.from('store_settings').upsert({
-    id: 'default',
-    usdt_bep20_address: anySettings.usdtBep20Address || null,
-    usdt_trc20_address: anySettings.usdtTrc20Address || null,
-    binance_pay_id: anySettings.binancePayId || null,
-    telegram_support_handle: anySettings.telegramSupportHandle || null,
-    announcement_bar: updated.announcementText || null,
-    promo_banner_code: updated.promoBannerCode || null,
-    promo_banner_text: updated.promoBannerText || null,
-    is_promo_banner_active: updated.showPromoBanner ?? true,
-    admin_passcode: anySettings.adminPasscode || null,
-    auto_dispatch_keys: anySettings.autoDispatchKeys ?? true,
-  }, { onConflict: 'id' }).then(({ error }) => {
-    if (error) console.error('Supabase updateSettings error:', error);
-  });
+  try {
+    const anySettings = updated as any;
+    await supabase.from('store_settings').upsert({
+      id: 'default',
+      usdt_bep20_address: updated.bep20WalletAddress || anySettings.usdtBep20Address || null,
+      usdt_trc20_address: updated.trc20WalletAddress || anySettings.usdtTrc20Address || null,
+      binance_pay_id: updated.binancePayId || anySettings.binancePayId || null,
+      telegram_support_handle: updated.telegramSupportHandle || anySettings.telegramSupportHandle || null,
+      whatsapp_number: updated.whatsappSupportNumber || anySettings.whatsappNumber || null,
+      announcement_bar: updated.announcementText || null,
+      promo_banner_code: updated.promoBannerCode || null,
+      promo_banner_text: updated.promoBannerText || null,
+      is_promo_banner_active: updated.showPromoBanner ?? true,
+      admin_passcode: updated.adminPasscode || anySettings.adminPasscode || null,
+      store_name: updated.storeName || null,
+      store_tagline: updated.storeTagline || null,
+    }, { onConflict: 'id' });
+  } catch (err) {
+    console.error('updateSettingsAsync Supabase error:', err);
+  }
 
   return updated;
 }
 
+export function updateSettings(newSettings: Partial<StoreSettings>): StoreSettings {
+  updateSettingsAsync(newSettings);
+  return { ...getSettings(), ...newSettings };
+}
+
 // ----------------------------------------------------
-// Digital Keys Vault (Credentials / Coupons / Invite Links)
+// Digital Keys Vault (Supabase Persistent)
 // ----------------------------------------------------
+export async function getDigitalKeysAsync(productId?: string): Promise<DigitalKey[]> {
+  try {
+    let query = supabase.from('digital_keys').select('*').order('created_at', { ascending: false });
+    if (productId) {
+      query = query.eq('product_id', productId);
+    }
+    const { data: dbKeys, error } = await query;
+
+    if (!error && dbKeys && dbKeys.length > 0) {
+      return dbKeys.map((k: any) => ({
+        id: k.id,
+        productId: k.product_id,
+        planId: k.plan_id,
+        content: k.content,
+        email: k.email,
+        password: k.password,
+        twoFactorSecret: k.two_factor_secret,
+        couponCode: k.coupon_code,
+        inviteUrl: k.invite_url,
+        deliveryType: k.delivery_type || (k.email ? 'account_credentials' : k.invite_url ? 'invite_link' : 'coupon_key'),
+        isUsed: k.is_used,
+        assignedToOrderId: k.claimed_by_order_id,
+        usedAt: k.claimed_at,
+        createdAt: k.created_at
+      }));
+    }
+  } catch (err) {
+    console.error('getDigitalKeysAsync error:', err);
+  }
+
+  return getDigitalKeys(productId);
+}
+
 export function getDigitalKeys(productId?: string): DigitalKey[] {
   const keys = readJsonFile<DigitalKey[]>('keys.json', INITIAL_KEYS);
   if (productId) {
@@ -330,8 +576,7 @@ export interface NewKeyInput {
   inviteUrl?: string;
 }
 
-export function addDigitalKeys(newKeys: NewKeyInput[]): DigitalKey[] {
-  const keys = getDigitalKeys();
+export async function addDigitalKeysAsync(newKeys: NewKeyInput[]): Promise<DigitalKey[]> {
   const created: DigitalKey[] = newKeys.map(k => {
     let email = k.email;
     let password = k.password;
@@ -340,7 +585,6 @@ export function addDigitalKeys(newKeys: NewKeyInput[]): DigitalKey[] {
     let inviteUrl = k.inviteUrl;
     let deliveryType: DeliveryMethodType = k.deliveryType || 'account_credentials';
 
-    // Auto-detect format if raw content string passed
     if (!email && !couponCode && !inviteUrl && k.content) {
       if (k.content.startsWith('http://') || k.content.startsWith('https://')) {
         deliveryType = 'invite_link';
@@ -377,96 +621,135 @@ export function addDigitalKeys(newKeys: NewKeyInput[]): DigitalKey[] {
     };
   });
 
-  keys.push(...created);
-  writeJsonFile('keys.json', keys);
+  try {
+    const dbRows = created.map(k => ({
+      id: k.id,
+      product_id: k.productId,
+      plan_id: k.planId,
+      content: k.content,
+      email: k.email || null,
+      password: k.password || null,
+      two_factor_secret: k.twoFactorSecret || null,
+      is_used: false,
+      created_at: k.createdAt,
+    }));
 
-  // Sync insert to Supabase
-  const dbRows = created.map(k => ({
-    id: k.id,
-    product_id: k.productId,
-    plan_id: k.planId,
-    content: k.content,
-    email: k.email || null,
-    password: k.password || null,
-    two_factor_secret: k.twoFactorSecret || null,
-    is_used: false,
-    created_at: k.createdAt,
-  }));
+    await supabase.from('digital_keys').insert(dbRows);
 
-  supabase.from('digital_keys').insert(dbRows).then(({ error }) => {
-    if (error) console.error('Supabase addDigitalKeys error:', error);
-  });
+    if (created.length > 0) {
+      const targetProductId = created[0].productId;
+      const { count } = await supabase
+        .from('digital_keys')
+        .select('*', { count: 'exact', head: true })
+        .eq('product_id', targetProductId)
+        .eq('is_used', false);
 
-  // Automatically update the product's stock count in Supabase and products.json
-  if (created.length > 0) {
-    const targetProductId = created[0].productId;
-    const availableCount = keys.filter(k => k.productId === targetProductId && !k.isUsed).length;
-    
-    const products = readJsonFile<Product[]>('products.json', INITIAL_PRODUCTS);
-    const prodIndex = products.findIndex(p => p.id === targetProductId);
-    if (prodIndex >= 0) {
-      products[prodIndex].stockCount = availableCount;
-      writeJsonFile('products.json', products);
-      supabase.from('products').update({ stock_count: availableCount }).eq('id', targetProductId).then();
+      await supabase
+        .from('products')
+        .update({ stock_count: count || 0 })
+        .eq('id', targetProductId);
     }
+  } catch (err) {
+    console.error('addDigitalKeysAsync error:', err);
   }
 
   return created;
 }
 
-export function claimKeyForOrder(productId: string, planId: string, orderId: string): DigitalKey | null {
-  const keys = getDigitalKeys();
-  const availableKey = keys.find(k => k.productId === productId && (!k.planId || k.planId === planId) && !k.isUsed);
-  if (!availableKey) return null;
+export function addDigitalKeys(newKeys: NewKeyInput[]): DigitalKey[] {
+  addDigitalKeysAsync(newKeys);
+  return [];
+}
 
-  availableKey.isUsed = true;
-  availableKey.assignedToOrderId = orderId;
-  availableKey.usedAt = new Date().toISOString();
-  writeJsonFile('keys.json', keys);
+export async function claimKeyForOrderAsync(productId: string, planId: string, orderId: string): Promise<DigitalKey | null> {
+  try {
+    const { data: availableKey, error } = await supabase
+      .from('digital_keys')
+      .select('*')
+      .eq('product_id', productId)
+      .eq('is_used', false)
+      .limit(1)
+      .maybeSingle();
 
-  // Sync claim update to Supabase
-  supabase.from('digital_keys').update({
-    is_used: true,
-    claimed_by_order_id: orderId,
-    claimed_at: availableKey.usedAt,
-  }).eq('id', availableKey.id).then(({ error }) => {
-    if (error) console.error('Supabase claimKey error:', error);
-  });
+    if (availableKey) {
+      const usedAt = new Date().toISOString();
+      await supabase
+        .from('digital_keys')
+        .update({
+          is_used: true,
+          claimed_by_order_id: orderId,
+          claimed_at: usedAt,
+        })
+        .eq('id', availableKey.id);
 
-  // Decrement product stock count in Supabase and local cache
-  const availableCount = keys.filter(k => k.productId === productId && !k.isUsed).length;
-  const products = readJsonFile<Product[]>('products.json', INITIAL_PRODUCTS);
-  const prodIndex = products.findIndex(p => p.id === productId);
-  if (prodIndex >= 0) {
-    products[prodIndex].stockCount = availableCount;
-    writeJsonFile('products.json', products);
-    supabase.from('products').update({ stock_count: availableCount }).eq('id', productId).then();
+      const { count } = await supabase
+        .from('digital_keys')
+        .select('*', { count: 'exact', head: true })
+        .eq('product_id', productId)
+        .eq('is_used', false);
+
+      await supabase
+        .from('products')
+        .update({ stock_count: count || 0 })
+        .eq('id', productId);
+
+      return {
+        id: availableKey.id,
+        productId: availableKey.product_id,
+        planId: availableKey.plan_id,
+        content: availableKey.content,
+        email: availableKey.email,
+        password: availableKey.password,
+        twoFactorSecret: availableKey.two_factor_secret,
+        deliveryType: availableKey.delivery_type || 'account_credentials',
+        isUsed: true,
+        assignedToOrderId: orderId,
+        usedAt,
+        createdAt: availableKey.created_at
+      };
+    }
+  } catch (err) {
+    console.error('claimKeyForOrderAsync error:', err);
   }
 
-  return availableKey;
+  return null;
+}
+
+export function claimKeyForOrder(productId: string, planId: string, orderId: string): DigitalKey | null {
+  claimKeyForOrderAsync(productId, planId, orderId);
+  return null;
+}
+
+export async function deleteDigitalKeyAsync(id: string): Promise<boolean> {
+  try {
+    const { data: targetKey } = await supabase
+      .from('digital_keys')
+      .select('product_id')
+      .eq('id', id)
+      .single();
+
+    await supabase.from('digital_keys').delete().eq('id', id);
+
+    if (targetKey) {
+      const { count } = await supabase
+        .from('digital_keys')
+        .select('*', { count: 'exact', head: true })
+        .eq('product_id', targetKey.product_id)
+        .eq('is_used', false);
+
+      await supabase
+        .from('products')
+        .update({ stock_count: count || 0 })
+        .eq('id', targetKey.product_id);
+    }
+  } catch (err) {
+    console.error('deleteDigitalKeyAsync error:', err);
+  }
+
+  return true;
 }
 
 export function deleteDigitalKey(id: string): boolean {
-  const keys = getDigitalKeys();
-  const targetKey = keys.find(k => k.id === id);
-  const filtered = keys.filter(k => k.id !== id);
-  writeJsonFile('keys.json', filtered);
-
-  supabase.from('digital_keys').delete().eq('id', id).then(({ error }) => {
-    if (error) console.error('Supabase deleteDigitalKey error:', error);
-  });
-
-  // Recalculate stock count for product
-  if (targetKey) {
-    const availableCount = filtered.filter(k => k.productId === targetKey.productId && !k.isUsed).length;
-    const products = readJsonFile<Product[]>('products.json', INITIAL_PRODUCTS);
-    const prodIndex = products.findIndex(p => p.id === targetKey.productId);
-    if (prodIndex >= 0) {
-      products[prodIndex].stockCount = availableCount;
-      writeJsonFile('products.json', products);
-      supabase.from('products').update({ stock_count: availableCount }).eq('id', targetKey.productId).then();
-    }
-  }
-
+  deleteDigitalKeyAsync(id);
   return true;
 }

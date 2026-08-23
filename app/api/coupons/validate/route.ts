@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
-import { getCouponByCode } from '@/lib/db';
+import { getCouponByCodeAsync } from '@/lib/db';
+
+export const dynamic = 'force-dynamic';
 
 export async function POST(req: Request) {
   try {
@@ -8,7 +10,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ valid: false, error: 'Coupon code required' }, { status: 400 });
     }
 
-    const coupon = getCouponByCode(code);
+    const coupon = await getCouponByCodeAsync(code);
     if (!coupon || !coupon.isActive) {
       return NextResponse.json({ valid: false, error: 'Invalid or inactive coupon code' });
     }
@@ -38,8 +40,7 @@ export async function POST(req: Request) {
     return NextResponse.json({
       valid: true,
       coupon,
-      discountAmount: Number(discount.toFixed(2)),
-      message: `Coupon '${coupon.code}' applied! Saved $${discount.toFixed(2)}`
+      discountAmount: Number(discount.toFixed(4)),
     });
   } catch (error) {
     return NextResponse.json({ valid: false, error: 'Failed to validate coupon' }, { status: 500 });

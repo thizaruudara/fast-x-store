@@ -1,11 +1,13 @@
 import { NextResponse } from 'next/server';
-import { getOrderById, updateOrderStatus } from '@/lib/db';
+import { getOrderByIdAsync, updateOrderStatusAsync } from '@/lib/db';
+
+export const dynamic = 'force-dynamic';
 
 export async function GET(
   req: Request,
   { params }: { params: { id: string } }
 ) {
-  const order = getOrderById(params.id);
+  const order = await getOrderByIdAsync(params.id);
   if (!order) {
     return NextResponse.json({ error: 'Order not found' }, { status: 404 });
   }
@@ -20,7 +22,12 @@ export async function PATCH(
     const body = await req.json();
     const { status, txHash, deliveredKeys, deliveryNotes } = body;
 
-    const updated = updateOrderStatus(params.id, status, { txHash, deliveredKeys, deliveryNotes });
+    const updated = await updateOrderStatusAsync(params.id, status, {
+      txHash,
+      deliveredKeys,
+      deliveryNotes,
+    });
+
     if (!updated) {
       return NextResponse.json({ error: 'Order not found' }, { status: 404 });
     }

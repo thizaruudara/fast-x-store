@@ -1,10 +1,12 @@
 import { NextResponse } from 'next/server';
-import { getProducts, saveProduct, reorderProducts } from '@/lib/db';
+import { getProductsAsync, saveProductAsync, reorderProductsAsync } from '@/lib/db';
 import { Product } from '@/lib/types';
+
+export const dynamic = 'force-dynamic';
 
 export async function GET() {
   try {
-    const products = getProducts();
+    const products = await getProductsAsync();
     return NextResponse.json(products);
   } catch (error) {
     return NextResponse.json({ error: 'Failed to fetch products' }, { status: 500 });
@@ -15,9 +17,8 @@ export async function POST(req: Request) {
   try {
     const body = await req.json();
 
-    // Check if reordering an array of products
     if (Array.isArray(body)) {
-      const updated = reorderProducts(body);
+      const updated = await reorderProductsAsync(body);
       return NextResponse.json({ success: true, products: updated });
     }
 
@@ -33,7 +34,7 @@ export async function POST(req: Request) {
       prodBody.slug = prodBody.name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
     }
 
-    const saved = saveProduct(prodBody);
+    const saved = await saveProductAsync(prodBody);
     return NextResponse.json(saved);
   } catch (error) {
     return NextResponse.json({ error: 'Failed to save product' }, { status: 500 });
@@ -44,7 +45,7 @@ export async function PUT(req: Request) {
   try {
     const body = await req.json();
     if (Array.isArray(body)) {
-      const updated = reorderProducts(body);
+      const updated = await reorderProductsAsync(body);
       return NextResponse.json({ success: true, products: updated });
     }
     return NextResponse.json({ error: 'Expected array of products' }, { status: 400 });

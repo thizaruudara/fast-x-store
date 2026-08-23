@@ -1,11 +1,13 @@
 import { NextResponse } from 'next/server';
-import { getProductById, deleteProduct } from '@/lib/db';
+import { getProductByIdAsync, deleteProductAsync } from '@/lib/db';
+
+export const dynamic = 'force-dynamic';
 
 export async function GET(
   req: Request,
   { params }: { params: { id: string } }
 ) {
-  const product = getProductById(params.id);
+  const product = await getProductByIdAsync(params.id);
   if (!product) {
     return NextResponse.json({ error: 'Product not found' }, { status: 404 });
   }
@@ -16,6 +18,6 @@ export async function DELETE(
   req: Request,
   { params }: { params: { id: string } }
 ) {
-  const success = deleteProduct(params.id);
+  const success = await deleteProductAsync(params.id);
   return NextResponse.json({ success });
 }
