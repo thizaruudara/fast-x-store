@@ -149,19 +149,20 @@ export function saveOrder(order: Order): Order {
   writeJsonFile('orders.json', orders);
 
   // Sync to Supabase in background
+  const anyOrder = order as any;
   supabase.from('orders').upsert({
     id: order.id,
     customer_email: order.customerEmail,
-    customer_telegram: order.customerTelegram || null,
-    customer_user_id: order.customerUserId || null,
+    customer_telegram: anyOrder.customerTelegram || order.telegramUsername || null,
+    customer_user_id: anyOrder.customerUserId || null,
     items: order.items,
     subtotal: order.subtotal,
-    discount: order.discount || 0,
-    micro_fee: order.microFee || 0.0123,
+    discount: anyOrder.discount || order.discountAmount || 0,
+    micro_fee: anyOrder.microFee || order.verificationFee || 0.0123,
     total_amount: order.totalAmount,
     status: order.status,
     payment_method: order.paymentMethod,
-    payment_address: order.paymentAddress,
+    payment_address: anyOrder.paymentAddress || order.paymentDetails?.bep20Address || null,
     tx_hash: order.paymentDetails?.txHash || null,
     delivered_keys: order.deliveredKeys || [],
     delivery_notes: order.deliveryNotes || null,
@@ -244,12 +245,13 @@ export function saveCoupon(coupon: Coupon): Coupon {
   writeJsonFile('coupons.json', coupons);
 
   // Sync to Supabase
+  const anyCoupon = coupon as any;
   supabase.from('coupons').upsert({
     id: coupon.id,
     code: coupon.code.toUpperCase(),
-    discount_percent: coupon.discountPercent,
+    discount_percent: anyCoupon.discountPercent || coupon.discountValue || 0,
     is_active: coupon.isActive ?? true,
-    usage_count: coupon.usageCount || 0,
+    usage_count: anyCoupon.usageCount || coupon.usedCount || 0,
     max_uses: coupon.maxUses || null,
     expires_at: coupon.expiresAt || null,
   }, { onConflict: 'id' }).then(({ error }) => {
@@ -284,18 +286,19 @@ export function updateSettings(newSettings: Partial<StoreSettings>): StoreSettin
   writeJsonFile('settings.json', updated);
 
   // Sync to Supabase
+  const anySettings = updated as any;
   supabase.from('store_settings').upsert({
     id: 'default',
-    usdt_bep20_address: updated.usdtBep20Address,
-    usdt_trc20_address: updated.usdtTrc20Address,
-    binance_pay_id: updated.binancePayId,
-    telegram_support_handle: updated.telegramSupportHandle,
-    announcement_bar: updated.announcementBar,
-    promo_banner_code: updated.promoBannerCode,
-    promo_banner_text: updated.promoBannerText,
-    is_promo_banner_active: updated.isPromoBannerActive,
-    admin_passcode: updated.adminPasscode,
-    auto_dispatch_keys: updated.autoDispatchKeys,
+    usdt_bep20_address: anySettings.usdtBep20Address || null,
+    usdt_trc20_address: anySettings.usdtTrc20Address || null,
+    binance_pay_id: anySettings.binancePayId || null,
+    telegram_support_handle: anySettings.telegramSupportHandle || null,
+    announcement_bar: updated.announcementText || null,
+    promo_banner_code: updated.promoBannerCode || null,
+    promo_banner_text: updated.promoBannerText || null,
+    is_promo_banner_active: updated.showPromoBanner ?? true,
+    admin_passcode: anySettings.adminPasscode || null,
+    auto_dispatch_keys: anySettings.autoDispatchKeys ?? true,
   }, { onConflict: 'id' }).then(({ error }) => {
     if (error) console.error('Supabase updateSettings error:', error);
   });

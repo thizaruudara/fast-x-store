@@ -215,6 +215,8 @@ export default function CustomerOrdersModal({
                             clean = keyString.substring(s + 3).trim();
                           }
                           const isLink = clean.startsWith('http://') || clean.startsWith('https://');
+                          const parts = clean.split(':').map((p) => p.trim());
+                          const isAcc = parts.length >= 2 && parts[0].includes('@');
 
                           return (
                             <div
