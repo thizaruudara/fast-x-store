@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" fill="none">
+  <rect width="100" height="100" rx="22" fill="#141414" />
+  <!-- Netflix Left Vertical Bar -->
+  <path d="M30 20H42V80H30V20Z" fill="#B81D24" />
+  <!-- Netflix Right Vertical Bar -->
+  <path d="M58 20H70V80H58V20Z" fill="#B81D24" />
+  <!-- Netflix 3D Diagonal Ribbon -->
+  <path d="M30 20L70 80H58L30 38V20Z" fill="#E50914" />
+  <path d="M30 20H42L70 80H58L30 20Z" fill="#E50914" />
+  <path d="M30 20H42L58 80H46L30 20Z" fill="#E50914" opacity="0.9" />
+</svg>

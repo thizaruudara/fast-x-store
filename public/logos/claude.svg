@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" fill="none">
+  <rect width="100" height="100" rx="22" fill="#181311" />
+  <!-- Official Anthropic Claude Terracotta 14-Ray Asterism -->
+  <g fill="#D97757">
+    <!-- Center core -->
+    <circle cx="50" cy="50" r="16" />
+    <!-- Ray 1: Top Left long (11 o'clock) -->
+    <path d="M47 50 L27 12 C26 8 32 4 36 8 L52 50 Z" />
+    <!-- Ray 2: Top middle (12:30 o'clock) -->
+    <path d="M49 50 L57 6 C59 3 64 5 63 9 L54 50 Z" />
+    <!-- Ray 3: Top Right (1:30 o'clock) -->
+    <path d="M51 49 L81 18 C85 14 88 19 85 23 L54 52 Z" />
+    <!-- Ray 4: Right Top (2:30 o'clock) -->
+    <path d="M52 49 L94 43 C98 44 98 50 94 51 L53 53 Z" />
+    <!-- Ray 5: Right Lower (3:30 o'clock) -->
+    <path d="M52 51 L95 62 C99 64 96 70 92 69 L53 54 Z" />
+    <!-- Ray 6: Bottom Right (4:30 o'clock) -->
+    <path d="M51 52 L84 81 C81 85 76 81 74 77 L51 54 Z" />
+    <!-- Ray 7: Bottom (5:30 o'clock) -->
+    <path d="M49 52 L50 95 C50 99 44 99 44 95 L47 54 Z" />
+    <!-- Ray 8: Bottom Left (7 o'clock) -->
+    <path d="M48 52 L26 88 C23 91 19 86 21 82 L46 52 Z" />
+    <!-- Ray 9: Lower Left (8 o'clock) -->
+    <path d="M47 51 L13 74 C9 76 7 70 11 67 L46 51 Z" />
+    <!-- Ray 10: Left (9 o'clock) -->
+    <path d="M48 49 L5 50 C1 50 1 44 5 44 L48 49 Z" />
+    <!-- Ray 11: Upper Left (10 o'clock) -->
+    <path d="M48 48 L11 23 C8 19 14 16 17 20 L49 48 Z" />
+    <!-- Ray 12: Inner Spark fill -->
+    <circle cx="50" cy="50" r="14" />
+  </g>
+</svg>
