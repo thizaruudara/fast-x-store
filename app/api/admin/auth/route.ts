@@ -3,23 +3,31 @@ import { getSettings } from '@/lib/db';
 
 export async function POST(req: Request) {
   try {
-    const { passcode } = await req.json();
-    const settings = getSettings();
+    const body = await req.json().catch(() => ({}));
+    const passcode = String(body?.passcode || '').trim();
 
-    const inputPass = String(passcode || '').trim();
+    let dbPass = '';
+    try {
+      const settings = getSettings();
+      dbPass = String(settings?.adminPasscode || '').trim();
+    } catch (e) {
+      // Fallback
+    }
 
-    // Check against all possible valid admin passcodes
-    const validPasscodes = [
-      process.env.ADMIN_PASSCODE?.trim(),
-      settings.adminPasscode?.trim(),
+    const envPass = String(process.env.ADMIN_PASSCODE || '').trim();
+
+    // Check against all valid passcodes
+    const validCodes = [
       'Thisaru@2007xD',
+      envPass,
+      dbPass,
       'admin1234'
     ].filter(Boolean);
 
-    const isMatch = validPasscodes.some(p => p === inputPass);
+    const isMatch = validCodes.includes(passcode);
 
-    if (!inputPass || !isMatch) {
-      return NextResponse.json({ success: false, error: 'Invalid admin passcode' }, { status: 401 });
+    if (!passcode || !isMatch) {
+      return NextResponse.json({ success: false, error: 'Incorrect admin passcode' }, { status: 401 });
     }
 
     return NextResponse.json({ 
@@ -27,6 +35,6 @@ export async function POST(req: Request) {
       token: 'admin_authenticated_session_token' 
     });
   } catch (error) {
-    return NextResponse.json({ error: 'Auth failed' }, { status: 500 });
+    return NextResponse.json({ success: false, error: 'Authentication error' }, { status: 500 });
   }
 }

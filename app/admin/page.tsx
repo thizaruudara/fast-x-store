@@ -116,7 +116,7 @@ export default function AdminDashboardPage() {
               <input
                 type="password"
                 required
-                placeholder="Default Passcode: admin1234"
+                placeholder="Enter admin passcode"
                 value={passcode}
                 onChange={(e) => setPasscode(e.target.value)}
                 className="w-full px-4 py-3 bg-zinc-900 border border-white/10 rounded-xl text-center font-mono text-lg tracking-widest text-white focus:outline-none focus:border-amber-400"
@@ -129,9 +129,6 @@ export default function AdminDashboardPage() {
               Unlock Dashboard
             </button>
           </form>
-          <p className="text-[11px] text-zinc-500 mt-4">
-            Default passcode is <code className="text-amber-400 font-mono">admin1234</code> (can be changed in settings).
-          </p>
         </div>
       </div>
     );

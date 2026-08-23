@@ -7,34 +7,35 @@ import { supabase } from './supabase';
 const DATA_DIR = path.join(process.cwd(), '.data');
 
 function ensureDataDir() {
-  if (!fs.existsSync(DATA_DIR)) {
-    fs.mkdirSync(DATA_DIR, { recursive: true });
+  try {
+    if (!fs.existsSync(DATA_DIR)) {
+      fs.mkdirSync(DATA_DIR, { recursive: true });
+    }
+  } catch (e) {
+    // Ignore read-only filesystem errors on Vercel
   }
 }
 
 function readJsonFile<T>(filename: string, defaultData: T): T {
-  ensureDataDir();
-  const filePath = path.join(DATA_DIR, filename);
   try {
+    const filePath = path.join(DATA_DIR, filename);
     if (!fs.existsSync(filePath)) {
-      fs.writeFileSync(filePath, JSON.stringify(defaultData, null, 2), 'utf-8');
       return defaultData;
     }
     const data = fs.readFileSync(filePath, 'utf-8');
     return JSON.parse(data) as T;
   } catch (error) {
-    console.error(`Error reading ${filename}:`, error);
     return defaultData;
   }
 }
 
 function writeJsonFile<T>(filename: string, data: T): void {
-  ensureDataDir();
-  const filePath = path.join(DATA_DIR, filename);
   try {
+    ensureDataDir();
+    const filePath = path.join(DATA_DIR, filename);
     fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf-8');
   } catch (error) {
-    console.error(`Error writing ${filename}:`, error);
+    // Read-only on serverless, syncs directly to Supabase cloud database
   }
 }
 
