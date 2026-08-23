@@ -76,8 +76,8 @@ export default function Navbar({
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16 md:h-20 gap-4">
           {/* Brand Logo */}
-          <Link href="/" className="flex items-center gap-3 group">
-            <div className="w-10 h-10 rounded-xl bg-black border border-white/20 overflow-hidden flex items-center justify-center shadow-lg shadow-amber-400/10 group-hover:scale-105 group-hover:border-amber-400/50 transition-all flex-shrink-0">
+          <Link href="/" className="flex items-center gap-2 sm:gap-3 flex-shrink-0 group">
+            <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-black border border-white/20 overflow-hidden flex items-center justify-center shadow-lg shadow-amber-400/10 group-hover:scale-105 group-hover:border-amber-400/50 transition-all flex-shrink-0">
               <img
                 src="/fastx-logo.jpg"
                 alt="Fast X Solutions"
@@ -85,16 +85,13 @@ export default function Navbar({
                 loading="eager"
               />
             </div>
-            <div>
-              <div className="flex items-center gap-1.5">
-                <span className="font-extrabold text-lg md:text-xl tracking-tight bg-gradient-to-r from-white via-zinc-200 to-zinc-400 bg-clip-text text-transparent">
-                  FAST <span className="text-amber-400">X</span>
-                </span>
-                <span className="px-1.5 py-0.5 text-[10px] font-bold rounded bg-amber-400/15 text-amber-300 border border-amber-400/30">
-                  SOLUTIONS
-                </span>
-              </div>
-              <p className="text-[11px] text-zinc-400 hidden sm:block">AI & Subscriptions Vault</p>
+            <div className="flex items-center gap-1.5 whitespace-nowrap">
+              <span className="font-extrabold text-base sm:text-xl tracking-tight text-white whitespace-nowrap flex items-center">
+                FAST&nbsp;<span className="text-amber-400">X</span>
+              </span>
+              <span className="px-1.5 py-0.5 text-[9px] sm:text-[10px] font-bold rounded bg-amber-400/15 text-amber-300 border border-amber-400/30 whitespace-nowrap">
+                SOLUTIONS
+              </span>
             </div>
           </Link>
 
