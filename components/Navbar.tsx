@@ -185,7 +185,7 @@ export default function Navbar({
             {user ? (
               <button
                 onClick={onOpenOrders}
-                className="flex items-center gap-2 p-1.5 sm:px-3 sm:py-1.5 rounded-xl bg-zinc-900/90 hover:bg-zinc-800 border border-amber-400/40 text-white transition-all shadow-md group"
+                className="flex items-center gap-1.5 p-1 sm:px-3 sm:py-1.5 rounded-xl bg-zinc-900/90 hover:bg-zinc-800 border border-amber-400/40 text-white transition-all shadow-md group"
                 title="View My Purchases & Subscriptions"
               >
                 {user.picture ? (
@@ -207,7 +207,7 @@ export default function Navbar({
                 </div>
               </button>
             ) : onLoginSuccess ? (
-              <div className="flex items-center">
+              <div className="hidden lg:flex items-center">
                 <GoogleAuthButton compact onLoginSuccess={onLoginSuccess} />
               </div>
             ) : null}
@@ -215,16 +215,25 @@ export default function Navbar({
             {/* Mobile menu trigger */}
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="md:hidden p-2.5 rounded-xl bg-zinc-900 text-zinc-400 hover:text-white"
+              className="md:hidden p-2 rounded-xl bg-zinc-900 border border-white/10 text-zinc-300 hover:text-white"
+              aria-label="Toggle Menu"
             >
-              {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+              {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5 text-amber-400" />}
             </button>
           </div>
         </div>
 
         {/* Mobile Search & Menu Dropdown */}
         {mobileMenuOpen && (
-          <div className="md:hidden py-4 border-t border-white/10 flex flex-col gap-3">
+          <div className="md:hidden py-4 border-t border-white/10 flex flex-col gap-3.5 bg-black/90 backdrop-blur-xl px-2 rounded-b-2xl">
+            {/* Google Sign-In prompt inside mobile menu if not signed in */}
+            {!user && onLoginSuccess && (
+              <div className="p-3 rounded-xl bg-zinc-900/90 border border-amber-400/20 flex flex-col items-center gap-2 text-center">
+                <span className="text-xs text-zinc-300 font-medium">Sign in to track orders & keys:</span>
+                <GoogleAuthButton onLoginSuccess={(u) => { onLoginSuccess(u); setMobileMenuOpen(false); }} />
+              </div>
+            )}
+
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
               <input
@@ -232,12 +241,12 @@ export default function Navbar({
                 placeholder="Search plans (Gemini, CapCut, Netflix)..."
                 value={searchQuery}
                 onChange={(e) => onSearchChange(e.target.value)}
-                className="w-full pl-9 pr-4 py-2 text-sm bg-zinc-900 border border-white/10 rounded-xl text-white"
+                className="w-full pl-9 pr-4 py-2 text-xs bg-zinc-900 border border-white/10 rounded-xl text-white placeholder-zinc-500 focus:outline-none focus:border-amber-400"
               />
             </div>
             
             {/* Category pills inside mobile menu */}
-            <div className="flex flex-wrap gap-1.5 pt-2">
+            <div className="flex flex-wrap gap-1.5 pt-1">
               {categories.map((cat) => (
                 <button
                   key={cat.id}
@@ -245,10 +254,10 @@ export default function Navbar({
                     onSelectCategory(cat.id);
                     setMobileMenuOpen(false);
                   }}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
                     activeCategory === cat.id
-                      ? 'bg-amber-400 text-black font-bold'
-                      : 'bg-zinc-800/80 text-zinc-300'
+                      ? 'bg-amber-400 text-black font-extrabold shadow-md'
+                      : 'bg-zinc-800/80 text-zinc-300 border border-white/5'
                   }`}
                 >
                   {cat.label}
@@ -261,10 +270,10 @@ export default function Navbar({
                 href={tgUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center gap-2 text-xs text-cyan-400 font-medium"
+                className="flex items-center gap-2 text-xs text-cyan-400 font-semibold"
               >
                 <MessageSquare className="w-4 h-4" />
-                <span>Telegram: {telegramHandle}</span>
+                <span>Telegram Support: {telegramHandle}</span>
               </a>
             </div>
           </div>

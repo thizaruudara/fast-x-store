@@ -6,7 +6,7 @@ export async function POST(req: Request) {
     const { passcode } = await req.json();
     const settings = getSettings();
 
-    if (!passcode || passcode !== settings.adminPasscode) {
+    if (!passcode || (passcode !== settings.adminPasscode && passcode !== process.env.ADMIN_PASSCODE)) {
       return NextResponse.json({ success: false, error: 'Invalid admin passcode' }, { status: 401 });
     }
 

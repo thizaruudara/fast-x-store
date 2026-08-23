@@ -17,7 +17,7 @@ export const INITIAL_SETTINGS: StoreSettings = {
   microFeeAmount: 0.0123,
   telegramSupportHandle: "@fastx_owner",
   whatsappSupportNumber: "+1234567890",
-  adminPasscode: "admin1234",
+  adminPasscode: process.env.ADMIN_PASSCODE || "admin1234",
   emailProvider: "resend",
   resendApiKey: "",
   senderEmail: "orders@fast-x.store",
