@@ -34,6 +34,18 @@ export default function CommunityPopupModal() {
     }
   }, []);
 
+  // Lock background body scroll when popup is open
+  useEffect(() => {
+    if (isOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [isOpen]);
+
   const handleDismiss = () => {
     if (dontShowAgain) {
       localStorage.setItem('fastx_community_popup_hide', 'true');
@@ -45,8 +57,8 @@ export default function CommunityPopupModal() {
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-fade-in">
-      <div className="relative w-full max-w-md bg-[#0e131f] border border-amber-400/40 rounded-3xl p-6 sm:p-7 shadow-2xl shadow-amber-400/10 my-auto text-center overflow-hidden">
+    <div className="fixed inset-0 z-50 overflow-y-auto overscroll-contain flex flex-col items-center justify-center p-3 sm:p-6 bg-black/85 backdrop-blur-md animate-fade-in">
+      <div className="relative w-full max-w-md bg-[#0e131f] border border-amber-400/40 rounded-3xl p-5 sm:p-7 shadow-2xl shadow-amber-400/10 my-auto text-center overflow-hidden">
         {/* Ambient Top Glow */}
         <div className="absolute top-0 left-1/2 -translate-x-1/2 w-48 h-12 bg-gradient-to-r from-amber-400/20 via-cyan-400/20 to-emerald-400/20 blur-xl pointer-events-none" />
 

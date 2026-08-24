@@ -46,16 +46,32 @@ export async function getProductsAsync(): Promise<Product[]> {
   try {
     const { data: dbProducts, error: prodErr } = await supabase
       .from('products')
-      .select('*')
-      .order('created_at', { ascending: true });
+      .select('*');
 
     const { data: dbKeys } = await supabase
       .from('digital_keys')
       .select('product_id, is_used')
       .eq('is_used', false);
 
+    // Read custom product order array from store_settings
+    const { data: dbSettings } = await supabase
+      .from('store_settings')
+      .select('usdt_trc20_address')
+      .eq('id', 'default')
+      .single();
+
+    let productOrder: string[] = [];
+    if (dbSettings?.usdt_trc20_address && dbSettings.usdt_trc20_address.startsWith('{')) {
+      try {
+        const parsed = JSON.parse(dbSettings.usdt_trc20_address);
+        if (Array.isArray(parsed.productOrder)) {
+          productOrder = parsed.productOrder;
+        }
+      } catch (e) {}
+    }
+
     if (!prodErr && dbProducts && dbProducts.length > 0) {
-      const mapped: Product[] = dbProducts.map((p: any, idx: number) => {
+      let mapped: Product[] = dbProducts.map((p: any) => {
         const availableCount = (dbKeys || []).filter((k: any) => k.product_id === p.id).length;
         return {
           id: p.id,
@@ -78,9 +94,23 @@ export async function getProductsAsync(): Promise<Product[]> {
           color: 'from-amber-400 via-yellow-500 to-amber-600',
           rating: 4.9,
           reviewCount: 350,
-          sortOrder: idx + 1
+          sortOrder: 99
         };
       });
+
+      // Apply saved custom sort order
+      if (productOrder.length > 0) {
+        mapped.sort((a, b) => {
+          const idxA = productOrder.indexOf(a.id);
+          const idxB = productOrder.indexOf(b.id);
+          if (idxA === -1 && idxB === -1) return 0;
+          if (idxA === -1) return 1;
+          if (idxB === -1) return -1;
+          return idxA - idxB;
+        });
+      }
+
+      mapped = mapped.map((p, i) => ({ ...p, sortOrder: i + 1 }));
       return mapped;
     }
   } catch (err) {
@@ -158,6 +188,34 @@ export async function reorderProductsAsync(reorderedProducts: Product[]): Promis
     sortOrder: idx + 1
   }));
   writeJsonFile('products.json', updated);
+
+  try {
+    const productOrder = reorderedProducts.map(p => p.id);
+
+    // Read current store_settings extra JSON
+    const { data: dbSettings } = await supabase
+      .from('store_settings')
+      .select('usdt_trc20_address')
+      .eq('id', 'default')
+      .single();
+
+    let extra: any = {};
+    if (dbSettings?.usdt_trc20_address && dbSettings.usdt_trc20_address.startsWith('{')) {
+      try {
+        extra = JSON.parse(dbSettings.usdt_trc20_address);
+      } catch (e) {}
+    }
+
+    extra.productOrder = productOrder;
+
+    await supabase.from('store_settings').upsert({
+      id: 'default',
+      usdt_trc20_address: JSON.stringify(extra)
+    }, { onConflict: 'id' });
+  } catch (err) {
+    console.error('reorderProductsAsync Supabase error:', err);
+  }
+
   return updated;
 }
 
@@ -173,6 +231,26 @@ export async function deleteProductAsync(id: string): Promise<boolean> {
 
   try {
     await supabase.from('products').delete().eq('id', id);
+
+    // Remove from productOrder array in Supabase
+    const { data: dbSettings } = await supabase
+      .from('store_settings')
+      .select('usdt_trc20_address')
+      .eq('id', 'default')
+      .single();
+
+    if (dbSettings?.usdt_trc20_address && dbSettings.usdt_trc20_address.startsWith('{')) {
+      try {
+        const extra = JSON.parse(dbSettings.usdt_trc20_address);
+        if (Array.isArray(extra.productOrder)) {
+          extra.productOrder = extra.productOrder.filter((pid: string) => pid !== id);
+          await supabase.from('store_settings').upsert({
+            id: 'default',
+            usdt_trc20_address: JSON.stringify(extra)
+          }, { onConflict: 'id' });
+        }
+      } catch (e) {}
+    }
   } catch (err) {
     console.error('deleteProductAsync error:', err);
   }
@@ -190,6 +268,7 @@ export function deleteProduct(id: string): boolean {
 // ----------------------------------------------------
 export async function getOrdersAsync(): Promise<Order[]> {
   try {
+    const settings = await getSettingsAsync();
     const { data: dbOrders, error } = await supabase
       .from('orders')
       .select('*')
@@ -208,8 +287,8 @@ export async function getOrdersAsync(): Promise<Order[]> {
         paymentMethod: o.payment_method || 'binance_pay',
         paymentDetails: {
           exactUsdtAmount: o.total_amount,
-          bep20Address: o.payment_address || '',
-          binancePayId: '982341098',
+          bep20Address: o.payment_address || settings.bep20WalletAddress,
+          binancePayId: settings.binancePayId,
           txHash: o.tx_hash,
           network: 'BEP-20 (BNB Smart Chain)'
         },

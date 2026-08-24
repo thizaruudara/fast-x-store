@@ -46,6 +46,18 @@ export default function QuickCheckoutModal({
   const [email, setEmail] = useState(initialEmail);
   const [telegram, setTelegram] = useState('');
 
+  // Lock background body scroll when checkout modal is open
+  React.useEffect(() => {
+    if (isOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [isOpen]);
+
   // Sync initial email when modal opens or user logs in
   React.useEffect(() => {
     if (initialEmail) {
@@ -101,32 +113,30 @@ export default function QuickCheckoutModal({
 
   const handleCreateOrder = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email.trim() || !email.includes('@')) {
-      setFormError('Please enter a valid email address for instant subscription delivery.');
+    if (!email.trim()) {
+      setFormError('Please enter a valid delivery email');
       return;
     }
-    setFormError('');
+
     setIsSubmitting(true);
+    setFormError('');
 
     try {
-      const formattedItems = items.map((i) => ({
-        productId: i.product.id,
-        productName: i.product.name,
-        planId: i.plan.id,
-        planName: i.plan.name,
-        price: i.plan.price,
-        quantity: i.quantity,
-        icon: i.product.icon,
-        logoUrl: i.product.logoUrl,
-      }));
-
       const res = await fetch('/api/orders', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           customerEmail: email.trim(),
           telegramUsername: telegram.trim() || undefined,
-          items: formattedItems,
+          items: items.map(i => ({
+            productId: i.product.id,
+            productName: i.product.name,
+            planId: i.plan.id,
+            planName: i.plan.name,
+            price: i.plan.price,
+            quantity: i.quantity,
+            logoUrl: i.product.logoUrl,
+          })),
           couponCode: appliedCoupon?.code,
         }),
       });
@@ -146,8 +156,8 @@ export default function QuickCheckoutModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md overflow-y-auto">
-      <div className="relative w-full max-w-xl bg-[#0e131f] border border-white/15 rounded-3xl p-6 sm:p-8 shadow-2xl shadow-black/90 my-8">
+    <div className="fixed inset-0 z-50 overflow-y-auto overscroll-contain flex flex-col items-center justify-start sm:justify-center p-3 sm:p-6 bg-black/85 backdrop-blur-md">
+      <div className="relative w-full max-w-xl bg-[#0e131f] border border-white/15 rounded-3xl p-5 sm:p-8 shadow-2xl shadow-black/90 my-auto">
         {/* Close Button */}
         <button
           onClick={onClose}

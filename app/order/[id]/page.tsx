@@ -42,9 +42,20 @@ export default function OrderTrackingPage() {
 
   const fetchOrder = async () => {
     try {
-      const res = await fetch(`/api/orders/${orderId}`);
-      if (!res.ok) throw new Error('Order not found');
-      const data: Order = await res.json();
+      const [orderRes, settingsRes] = await Promise.all([
+        fetch(`/api/orders/${orderId}`),
+        fetch('/api/settings')
+      ]);
+
+      if (!orderRes.ok) throw new Error('Order not found');
+      const data: Order = await orderRes.json();
+      const settingsData = settingsRes.ok ? await settingsRes.json() : null;
+
+      if (settingsData && data.paymentDetails) {
+        if (settingsData.binancePayId) data.paymentDetails.binancePayId = settingsData.binancePayId;
+        if (settingsData.bep20WalletAddress) data.paymentDetails.bep20Address = settingsData.bep20WalletAddress;
+      }
+
       setOrder(data);
       setLoading(false);
     } catch (err: any) {

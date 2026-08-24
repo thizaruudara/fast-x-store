@@ -39,6 +39,18 @@ export default function ProductDetailModal({
   const [addedToast, setAddedToast] = useState(false);
   const warrantyInfo = getProductWarranty(product);
 
+  // Lock background body scroll when modal is open
+  React.useEffect(() => {
+    if (isOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [isOpen]);
+
   const handleAdd = () => {
     onAddToCart(product, selectedPlan);
     setAddedToast(true);
@@ -46,8 +58,8 @@ export default function ProductDetailModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md overflow-y-auto">
-      <div className="relative w-full max-w-2xl bg-[#0e131f] border border-white/15 rounded-3xl p-6 sm:p-8 shadow-2xl shadow-black/90 my-8">
+    <div className="fixed inset-0 z-50 overflow-y-auto overscroll-contain flex flex-col items-center justify-start sm:justify-center p-3 sm:p-6 bg-black/85 backdrop-blur-md">
+      <div className="relative w-full max-w-2xl bg-[#0e131f] border border-white/15 rounded-3xl p-5 sm:p-8 shadow-2xl shadow-black/90 my-auto">
         {/* Close Button */}
         <button
           onClick={onClose}

@@ -39,15 +39,27 @@ export default function CartDrawer({
   onRemoveItem,
   onCheckout,
 }: CartDrawerProps) {
+  // Lock background body scroll when cart drawer is open
+  React.useEffect(() => {
+    if (isOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [isOpen]);
+
   if (!isOpen) return null;
 
   const subtotalUsdt = items.reduce((sum, item) => sum + item.plan.price * item.quantity, 0);
   const subtotalLkr = items.reduce((sum, item) => sum + (item.plan.priceLkr || Math.round(item.plan.price * 310)) * item.quantity, 0);
 
   return (
-    <div className="fixed inset-0 z-50 overflow-hidden bg-black/70 backdrop-blur-sm transition-opacity">
-      <div className="absolute inset-y-0 right-0 max-w-full flex pl-10">
-        <div className="w-screen max-w-md bg-[#0d121d] border-l border-white/10 p-6 flex flex-col justify-between shadow-2xl">
+    <div className="fixed inset-0 z-50 overflow-hidden bg-black/80 backdrop-blur-sm transition-opacity">
+      <div className="fixed inset-y-0 right-0 max-w-full flex w-full justify-end">
+        <div className="w-full max-w-md bg-[#0d121d] border-l border-white/10 p-4 sm:p-6 flex flex-col h-full justify-between shadow-2xl overflow-hidden">
           {/* Top Bar */}
           <div className="flex items-center justify-between pb-4 border-b border-white/10">
             <div className="flex items-center gap-2.5">

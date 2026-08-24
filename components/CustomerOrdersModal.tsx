@@ -60,6 +60,18 @@ export default function CustomerOrdersModal({
     }
   }, [isOpen, user?.email]);
 
+  // Lock background body scroll when modal is open
+  useEffect(() => {
+    if (isOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [isOpen]);
+
   if (!isOpen || !user) return null;
 
   const copyText = (text: string, id: string) => {
@@ -69,8 +81,8 @@ export default function CustomerOrdersModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fadeIn">
-      <div className="glass-panel w-full max-w-2xl max-h-[88vh] rounded-3xl border border-white/10 shadow-2xl flex flex-col overflow-hidden">
+    <div className="fixed inset-0 z-50 overflow-y-auto overscroll-contain flex flex-col items-center justify-start sm:justify-center p-3 sm:p-6 bg-black/85 backdrop-blur-md">
+      <div className="glass-panel w-full max-w-2xl my-auto rounded-3xl border border-white/10 shadow-2xl flex flex-col overflow-hidden">
         
         {/* Header */}
         <div className="p-6 border-b border-white/10 flex items-center justify-between bg-zinc-950/60">
